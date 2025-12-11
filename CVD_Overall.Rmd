@@ -1,0 +1,214 @@
+---
+title: "STA309Final_All"
+author: "Juyuan Li"
+date: "2023-05-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, results='hide', message=FALSE,warning = FALSE}
+library(tidyverse)
+library(caret)
+library(randomForest)
+
+# Input the data
+data <- read.csv("heart_disease.csv")
+
+# Data cleaning
+data$FastingBS <- as.factor(data$FastingBS)
+data$HeartDisease <- as.factor(data$HeartDisease)
+```
+
+```{r}
+# Using the caret package, setup a 5-fold cross validation study that is repeated 10 times.
+control <- trainControl(method = "repeatedcv", number = 5, repeats = 10)
+
+# Logistic regression model (glm)
+set.seed(1000)
+logistic_model <- train(HeartDisease ~ ., data = data, method = "glm", trControl = control)
+
+# Random Forest model (rf), search over all mtry values from 1 to 6
+set.seed(1000)
+rf_model <- train(HeartDisease ~ ., data = data, method = "rf", trControl = control,
+                  tuneGrid=expand.grid(mtry=1:6),importance=TRUE)
+
+# Compare and contrast the distribution of predictive Accuracy
+models_resamples <- resamples(list(logistic = logistic_model, rf = rf_model))
+summary(models_resamples)
+```
+
+```{r}
+# Find using how many randomly selected predictor variables for each split is the best approach
+print(rf_model)
+plot(rf_model)
+
+# Obtain the importance of each variable
+varImp(rf_model$finalModel)
+```
+
+```{r, message=FALSE,warning = FALSE}
+var_importance <- data.frame(
+  Variable = c("Age", "SexM", "ChestPainTypeATA", "ChestPainTypeNAP", "ChestPainTypeTA", "RestingBP", "Cholesterol", "FastingBS1", "RestingECGNormal", "RestingECGST", "MaxHR", "ExerciseAnginaY", "Oldpeak", "ST_SlopeFlat", "ST_SlopeUp"),
+  Importance = c(8.015065, 16.474281, 13.739364, 11.312178, 3.398701, 3.612911, 15.459420, 11.762094, 4.487822, 1.974925, 11.833626, 17.950264, 16.130702, 19.315449, 21.616619)
+)
+
+# Load ggplot2 for plotting
+library(ggplot2)
+
+# Create a bar chart of important variables
+important_variables_plot <- ggplot(var_importance, aes(x = reorder(Variable, Importance), y = Importance, fill = Importance)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient2(low = "blue", mid = "purple", high = "red", midpoint = median(var_importance$Importance), guide = FALSE) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  xlab("Factors of Heart Disease") +
+  ylab("Importance") +
+  ggtitle("Important Variables for Heart Disease Prediction") +
+  geom_text(aes(label = round(Importance, 2)), vjust = -0.5, size = 3.5)
+
+# Show the plot
+important_variables_plot
+```
+
+
+**According to the all the result, Random Forest model has better accuracy by about 1-2% than the Logistic regression model(Median 0.863 and 0.875; Mean 0.862 and 0.875). Heart disease is a leading cause of death globally, and early detection and intervention play a crucial role in improving patient outcomes. In the context of heart disease prediction, even a 1-2% improvement in model accuracy can potentially save lives, as it translates to identifying more individuals at risk and enabling timely interventions. Considering the large number of patients screened for heart disease risk, a 1-2% increase in prediction accuracy can lead to a significant number of individuals being correctly identified as high-risk. These individuals can then benefit from preventive measures, such as lifestyle changes, regular check-ups, and medication, ultimately reducing their risk of developing heart disease or experiencing severe complications. In conclusion, while the performance difference between the two models might seem small at first glance, it is important to recognize the real-world implications of such improvements in predictive accuracy, especially when dealing with life-threatening conditions like heart disease.**
+
+**Based on the random forest model, ST segment slopes (ST_SlopeUp and ST_SlopeFlat) on an ECG are important indicators of potential heart disease, as they can signal ischemia or other heart abnormalities. Exercise-induced angina is another strong predictor, as it suggests that the heart may not be receiving enough oxygen during physical activity. Gender, specifically male, has been found to be a risk factor for heart disease. Lastly, high cholesterol levels are known to contribute to the development of heart disease, as they can lead to the formation of plaque in the arteries, narrowing the blood vessels and restricting blood flow to the heart.**
+
+
+```{r, message=FALSE,warning = FALSE}
+# Only look at the top high importance factor
+var_importance_high <- data.frame(
+  Variable = c("SexM", "Cholesterol", "ExerciseAnginaY", "Oldpeak", "ST_SlopeFlat", "ST_SlopeUp"),
+  Importance = c(16.474281, 15.459420, 17.950264, 16.130702, 19.315449, 21.616619)
+)
+
+# Create a bar chart of important variables
+important_variables_high_plot <- ggplot(var_importance_high, aes(x = reorder(Variable, Importance), y = Importance, fill = Importance)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient2(low = "blue", mid = "purple", high = "red", midpoint = median(var_importance_high$Importance)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  xlab("Several High Risk Factor of Heart Disease") +
+  ylab("Risk") +
+  ggtitle("Important Factors for Heart Disease Prediction") +
+  geom_text(aes(label = round(Importance, 2)), vjust = -0.5, size = 3.5)
+
+# Show the plot
+important_variables_high_plot
+```
+
+```{r, message=FALSE,warning = FALSE}
+# Calculate the proportion of heart disease cases for males and females
+heart_disease_by_gender <- data %>%
+  group_by(Sex, HeartDisease) %>%
+  summarize(Count = n()) %>%
+  mutate(Proportion = Count / sum(Count)) %>%
+  filter(HeartDisease == 1)
+
+# Load the necessary libraries
+library(dplyr)
+library(ggplot2)
+
+# Create a bar plot of heart disease risk for males and females
+gender_risk_plot <- ggplot(heart_disease_by_gender, aes(x = as.factor(Sex), y = Proportion, fill = as.factor(Sex))) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("#FF10F0", "blue"), labels = c("Female", "Male"), name = "Gender") +
+  theme_minimal() +
+  xlab("Gender") +
+  ylab("Proportion of Heart Disease Cases") +
+  ggtitle("Heart Disease Risk by Gender") +
+  geom_text(aes(label = scales::percent(Proportion, accuracy = 1)), vjust = -0.5, size = 4) +
+  scale_x_discrete(labels = c("Female", "Male"))
+
+# Show the plot
+gender_risk_plot
+```
+
+```{r, message=FALSE,warning = FALSE}
+# Calculate the proportion of heart disease cases for each ST_Slope category
+heart_disease_by_st_slope <- data %>%
+  group_by(ST_Slope, HeartDisease) %>%
+  summarize(Count = n()) %>%
+  mutate(Proportion = Count / sum(Count))
+
+# Create a stacked bar plot of heart disease risk for different ST_Slope categories
+st_slope_risk_stacked_bar_plot <- ggplot(heart_disease_by_st_slope, aes(x = as.factor(ST_Slope), y = Proportion, fill = as.factor(HeartDisease))) +
+  geom_bar(stat = "identity", width = 0.7, position = "stack") +
+  scale_fill_manual(values = c("lightblue", "red"), labels = c("No Heart Disease", "Heart Disease"), name = "Heart Disease") +
+  theme_minimal() +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank()) +
+  ggtitle("Heart Disease Risk by ST Slope") +
+  ylab("Proportion") +
+  xlab("ST Slope") +
+  scale_x_discrete(labels = c("Up", "Flat", "Down"))
+
+# Display the plot
+st_slope_risk_stacked_bar_plot
+```
+
+```{r, message=FALSE,warning = FALSE}
+# Calculate the proportion of heart disease cases for each ExerciseAngina category
+heart_disease_by_exercise_angina <- data %>%
+  group_by(ExerciseAngina, HeartDisease) %>%
+  summarize(Count = n()) %>%
+  mutate(Proportion = Count / sum(Count)) %>%
+  filter(HeartDisease == 1)
+
+# Create a horizontal bar plot of heart disease risk for different ExerciseAngina categories
+exercise_angina_risk_plot <- ggplot(heart_disease_by_exercise_angina, aes(x = as.factor(ExerciseAngina), y = Proportion, fill = as.factor(ExerciseAngina))) +
+  geom_bar(stat = "identity", width = 0.6, position = "dodge") +
+  coord_flip() +
+  scale_fill_manual(values = c("blue", "red"), labels = c("No", "Yes"), name = "Exercise Angina") +
+  theme_minimal() +
+  theme(axis.title.y = element_blank(),
+        axis.ticks.y = element_blank()) +
+  labs(x = "Exercise Angina", y = "Proportion", title = "Heart Disease Risk by Exercise Angina") +
+  geom_text(aes(label = scales::percent(Proportion, accuracy = 1), y = Proportion), hjust = -0.2, size = 2.5)
+
+# Show the plot
+exercise_angina_risk_plot
+```
+
+```{r, message=FALSE,warning = FALSE}
+# Create a violin plot of Oldpeak values for heart disease and non-heart disease cases
+oldpeak_violin_plot <- ggplot(data, aes(x = as.factor(HeartDisease), y = Oldpeak, fill = as.factor(HeartDisease))) +
+  geom_violin(scale = "width", trim = TRUE) +
+  scale_fill_manual(values = c("green", "red"), labels = c("No Heart Disease", "Heart Disease"), name = "Heart Disease") +
+  theme_minimal() +
+  ggtitle("Oldpeak Values by Heart Disease Status") +
+  ylab("Oldpeak") +
+  xlab("Heart Disease Status") +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+
+# Display the plot
+oldpeak_violin_plot
+```
+
+```{r, message=FALSE,warning = FALSE}
+# Create a histogram with a density plot overlay for heart disease risk and Cholesterol values
+cholesterol_risk_plot <- ggplot(data, aes(x = Cholesterol, fill = HeartDisease, color = HeartDisease)) +
+  geom_histogram(aes(y = ..density..), position = "identity", alpha = 0.4, bins = 30) +
+  geom_density(size = 1) +
+  theme_minimal() +
+  labs(x = "Cholesterol", y = "Density & Count", title = "Heart Disease Risk by Cholesterol Value") +
+  scale_fill_manual(values = c("grey", "red"), labels = c("No Heart Disease", "Heart Disease"), name = "Heart Disease") +
+  scale_color_manual(values = c("grey", "red"), labels = c("No Heart Disease", "Heart Disease"), name = "Heart Disease")
+
+# Show the plot
+cholesterol_risk_plot
+```
+
+```{r, message=FALSE,warning = FALSE}
+# Save the plots as PNG file
+ggsave("gender_risk_plot.png", plot = gender_risk_plot, width = 16, height = 10, dpi = 300)
+ggsave("st_slope_risk_stacked_bar_plot.png", plot = st_slope_risk_stacked_bar_plot, width = 16, height = 10, dpi = 300)
+ggsave("exercise_angina_risk_plot.png", plot = exercise_angina_risk_plot, width = 16, height = 10, dpi = 300)
+ggsave("oldpeak_violin_plot.png", plot = oldpeak_violin_plot, width = 16, height = 10, dpi = 300)
+ggsave("cholesterol_risk_plot.png", plot = cholesterol_risk_plot, width = 16, height = 10, dpi = 300)
+```

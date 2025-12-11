@@ -1,0 +1,81 @@
+---
+title: "STA309Final_Q1"
+author: "Juyuan Li"
+date: "2023-05-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, results='hide', message=FALSE,warning = FALSE}
+library(caret)
+library(randomForest)
+
+# Input the data
+data <- read.csv("heart_disease.csv")
+
+# Data cleaning
+data$FastingBS <- as.factor(data$FastingBS)
+data$HeartDisease <- as.factor(data$HeartDisease)
+```
+
+```{r}
+# Using the caret package, setup a 5-fold cross validation study that is repeated 10 times.
+control <- trainControl(method = "repeatedcv", number = 5, repeats = 10)
+
+# Logistic regression model (glm)
+set.seed(1000)
+logistic_model <- train(HeartDisease ~ ., data = data, method = "glm", trControl = control)
+
+# Random Forest model (rf), search over all mtry values from 1 to 6
+set.seed(1000)
+rf_model <- train(HeartDisease ~ ., data = data, method = "rf", trControl = control,
+                  tuneGrid=expand.grid(mtry=1:6),importance=TRUE)
+
+# Compare and contrast the distribution of predictive Accuracy
+models_resamples <- resamples(list(logistic = logistic_model, rf = rf_model))
+summary(models_resamples)
+```
+
+```{r}
+# Find using how many randomly selected predictor variables for each split is the best approach
+print(rf_model)
+plot(rf_model)
+
+# Obtain the importance of each variable
+varImp(rf_model$finalModel)
+```
+
+**According to the all the result, Random Forest model has better accuracy by about 1-2% than the Logistic regression model(Median 0.863 and 0.875; Mean 0.862 and 0.875). Heart disease is a leading cause of death globally, and early detection and intervention play a crucial role in improving patient outcomes. In the context of heart disease prediction, even a 1-2% improvement in model accuracy can potentially save lives, as it translates to identifying more individuals at risk and enabling timely interventions. Considering the large number of patients screened for heart disease risk, a 1-2% increase in prediction accuracy can lead to a significant number of individuals being correctly identified as high-risk. These individuals can then benefit from preventive measures, such as lifestyle changes, regular check-ups, and medication, ultimately reducing their risk of developing heart disease or experiencing severe complications. In conclusion, while the performance difference between the two models might seem small at first glance, it is important to recognize the real-world implications of such improvements in predictive accuracy, especially when dealing with life-threatening conditions like heart disease.**
+
+**Based on the random forest model, ST segment slopes (ST_SlopeUp and ST_SlopeFlat) on an ECG are important indicators of potential heart disease, as they can signal ischemia or other heart abnormalities. Exercise-induced angina is another strong predictor, as it suggests that the heart may not be receiving enough oxygen during physical activity. Gender, specifically male, has been found to be a risk factor for heart disease. Lastly, high cholesterol levels are known to contribute to the development of heart disease, as they can lead to the formation of plaque in the arteries, narrowing the blood vessels and restricting blood flow to the heart.**
+
+
+```{r, message=FALSE,warning = FALSE}
+var_importance <- data.frame(
+  Variable = c("Age", "SexM", "ChestPainTypeATA", "ChestPainTypeNAP", "ChestPainTypeTA", "RestingBP", "Cholesterol", "FastingBS1", "RestingECGNormal", "RestingECGST", "MaxHR", "ExerciseAnginaY", "Oldpeak", "ST_SlopeFlat", "ST_SlopeUp"),
+  Importance = c(8.015065, 16.474281, 13.739364, 11.312178, 3.398701, 3.612911, 15.459420, 11.762094, 4.487822, 1.974925, 11.833626, 17.950264, 16.130702, 19.315449, 21.616619)
+)
+
+# Load ggplot2 for plotting
+library(ggplot2)
+
+# Create a bar chart of important variables
+important_variables_plot <- ggplot(var_importance, aes(x = reorder(Variable, Importance), y = Importance, fill = Importance)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient2(low = "blue", mid = "purple", high = "red", midpoint = median(var_importance$Importance), guide = FALSE) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  xlab("Variable") +
+  ylab("Importance") +
+  ggtitle("Important Variables for Heart Disease Prediction") +
+  geom_text(aes(label = round(Importance, 2)), vjust = -0.5, size = 3.5)
+
+# Show the plot
+important_variables_plot
+
+```
+
